@@ -10,7 +10,7 @@ from sklearn.metrics import accuracy_score
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 # Dataset hyperparameters
-parser.add_argument("--dataset", type=str, help="Dataset to load. Available: Synthetic")
+parser.add_argument("--dataset", type=str, default= "synthetic",  help="Dataset to load. Available: Synthetic")
 parser.add_argument("--ntimesteps", type=int, default=10, help="Synthetic dataset can control the number of timesteps")
 parser.add_argument("--nseries", type=int, default=500, help="Synthetic dataset can control the number of time series")
 

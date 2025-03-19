@@ -139,6 +139,7 @@ class EARLIEST(nn.Module):
         CE = torch.nn.CrossEntropyLoss()
         self.loss_b = MSE(b, self.R) # Baseline should approximate mean reward
         self.loss_r = (-self.log_pi*self.adjusted_reward).sum()/self.log_pi.shape[1] # RL loss
+        print(self.loss_r)
         self.loss_c = CE(logits, y) # Classification loss
         self.wait_penalty = self.halt_probs.sum(1).mean() # Penalize late predictions
         self.lam = torch.tensor([self.lam], dtype=torch.float, requires_grad=False)
