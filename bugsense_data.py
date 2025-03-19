@@ -121,5 +121,5 @@ class BugSenseData(Dataset):
 
         # Convert to tensor
         X = torch.tensor(images, dtype=torch.float32)  # Shape: [sequencelength, features]
-        y = torch.tensor([label], dtype=torch.long)  
+        y = torch.tensor(label, dtype=torch.long)  
         return X, y

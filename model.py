@@ -141,12 +141,11 @@ class EARLIEST(nn.Module):
 
     def computeLoss(self, logits, y):
         # --- compute reward ---
-        
-        _, y_hat = torch.max(torch.softmax(logits, dim=1), dim=1)
-        self.r = (2*(y_hat.float().round() == y.float()).float()-1).detach()
-        self.r = self.r[:, 0] 
-        self.R = self.r.unsqueeze(1) * self.grad_mask
 
+        _, y_hat = torch.max(torch.softmax(logits, dim=1), dim=1)
+        self.r = (2*(y_hat.float().round() == y.float()).float()-1).detach().unsqueeze(1)
+        self.R = self.r * self.grad_mask
+        
         # --- rescale reward with baseline ---
         b = self.grad_mask * self.baselines
         self.adjusted_reward = self.R - b.detach()
