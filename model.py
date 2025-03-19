@@ -42,15 +42,24 @@ class EARLIEST(nn.Module):
         self.nlayers = args.nlayers
         self.lam = args.lam
 
+
+        ### CHANGED ### 
+        self.intransforms = nn.Sequential(
+            nn.LayerNorm(3),  # Normalize across feature dimension
+            nn.Linear(3, self.nhid)  # Project input to hidden dimensions
+        )
+
+        ###############
+
         # --- Sub-networks ---
         self.Controller = Controller(self.nhid+1, 1)
         self.BaselineNetwork = BaselineNetwork(self.nhid+1, 1)
         if self.rnn_cell == "LSTM":
-            self.RNN = torch.nn.LSTM(ninp, self.nhid)
+            self.RNN = torch.nn.LSTM(self.nhid, self.nhid)
         elif self.rnn_cell == "LSTM":
-            self.RNN = torch.nn.GRU(ninp, self.nhid)
+            self.RNN = torch.nn.GRU(self.nhid, self.nhid)
         else:
-            self.RNN = torch.nn.RNN(ninp, self.nhid)
+            self.RNN = torch.nn.RNN(self.nhid, self.nhid)
         self.out = torch.nn.Linear(self.nhid, self.nclasses)
 
     def initHidden(self, bsz):
@@ -67,6 +76,10 @@ class EARLIEST(nn.Module):
             self.Controller._epsilon = 0.0
         else:
             self.Controller._epsilon = self._epsilon # set explore/exploit trade-off
+
+         ### CHANGED ### 
+        X = self.intransforms(X)
+        ###############
         T, B, V = X.shape # Assume input is of shape (TIMESTEPS x BATCH x VARIABLES)
         baselines = [] # Predicted baselines
         actions = [] # Which classes to halt at each step
@@ -76,6 +89,8 @@ class EARLIEST(nn.Module):
         hidden = self.initHidden(X.shape[1])
         predictions = torch.zeros((B, self.nclasses), requires_grad=True)
         all_preds = []
+
+       
 
         # --- for each timestep, select a set of actions ---
         for t in range(T):
@@ -126,21 +141,27 @@ class EARLIEST(nn.Module):
 
     def computeLoss(self, logits, y):
         # --- compute reward ---
+        
         _, y_hat = torch.max(torch.softmax(logits, dim=1), dim=1)
-        self.r = (2*(y_hat.float().round() == y.float()).float()-1).detach().unsqueeze(1)
-        self.R = self.r * self.grad_mask
+        self.r = (2*(y_hat.float().round() == y.float()).float()-1).detach()
+        self.r = self.r[:, 0] 
+        self.R = self.r.unsqueeze(1) * self.grad_mask
 
         # --- rescale reward with baseline ---
         b = self.grad_mask * self.baselines
         self.adjusted_reward = self.R - b.detach()
+        
+        y = y.argmax(dim=1)  # Convert from one-hot (B, C) -> class indices (B,)
 
         # --- compute losses ---
         MSE = torch.nn.MSELoss()
         CE = torch.nn.CrossEntropyLoss()
         self.loss_b = MSE(b, self.R) # Baseline should approximate mean reward
         self.loss_r = (-self.log_pi*self.adjusted_reward).sum()/self.log_pi.shape[1] # RL loss
+        
         self.loss_c = CE(logits, y) # Classification loss
         self.wait_penalty = self.halt_probs.sum(1).mean() # Penalize late predictions
+        print(self.loss_c)
         self.lam = torch.tensor([self.lam], dtype=torch.float, requires_grad=False)
         loss = self.loss_r + self.loss_b + self.loss_c + self.lam*(self.wait_penalty)
         # It can help to add a larger weight to self.loss_c so early training
