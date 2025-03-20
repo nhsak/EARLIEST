@@ -8,7 +8,7 @@ def exponentialDecay(N):
     t = np.linspace(0, tmax, N)
     y = np.exp(-t/tau)
     y = torch.FloatTensor(y)
-    return y/10.
+    return y
 
 def makedirs(dirname):
     if not os.path.exists(dirname):

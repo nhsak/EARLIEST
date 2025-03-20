@@ -4,13 +4,15 @@ from torch.utils.data import Dataset
 import numpy as np
 import re
 from PIL import Image
+import torchvision.transforms as transforms
 import random
+
 
 CLASSES = ['ecoli', 'efaecalis/kpneumoniae', 'ssaprophyticus/ehormaechei', 
            'paeruginosa/pmirabilis', 'saureus', 'sterile']
 
 class BugSenseData(Dataset):
-    def __init__(self, root_dir, partition="train", sequencelength=80, split_ratio=(0.7, 0.15, 0.15), seed=42):
+    def __init__(self, root_dir, partition="train", sequencelength=80, split_ratio=(0.7, 0.15,0.15), seed=None):
         """
         Args:
             root_dir (str): Root directory where the dataset is stored.
@@ -38,52 +40,67 @@ class BugSenseData(Dataset):
             'Ste': 'sterile'
         }
         
-        # Ensure the root directory exists
         if not os.path.isdir(root_dir):
             raise FileNotFoundError(f"Root directory '{root_dir}' not found.")
         
-        # Get all sample paths (subdirectories representing image series)
+        # Get all sample paths
         self.series_paths = [
             os.path.join(root_dir, folder)
             for folder in sorted(os.listdir(root_dir))
             if os.path.isdir(os.path.join(root_dir, folder)) and not folder.startswith('.')
         ]
 
-        # Generate labels based on the folder name
+        # Generate labels
         for folder in self.series_paths:
             category = str(os.path.basename(folder)).split("_")[0]
             if category in self.categories.keys():
                 self.samples.append(folder)
                 self.labels.append(CLASSES.index(self.categories[category]))
 
-        # Set random seed for reproducibility
-        random.seed(seed)
+
+        # Set random seed
+        if seed is not None:
+            random.seed(seed)
+        else:
+            random.seed()
+
         
-        # Shuffle the samples and split into train, valid, eval partitions
+        # Calculate split sizes
         dataset_size = len(self.samples)
         indices = list(range(dataset_size))
         random.shuffle(indices)
 
-        train_size = 160
-        valid_size = 16
-        eval_size = 16
-      
-
-        # Split indices for each partition
+        train_size = int(dataset_size * split_ratio[0])
+        valid_size = int(dataset_size * split_ratio[1])
+        
+        # Split indices
         train_indices = indices[:train_size]
         valid_indices = indices[train_size:train_size + valid_size]
         eval_indices = indices[train_size + valid_size:]
 
-        # Assign the appropriate samples to the partition
+        random.shuffle(train_indices)
+        random.shuffle(valid_indices)
+        random.shuffle(eval_indices)
+
+
+        # Assign samples based on partition
         if self.partition == 'train':
-            self.samples = [self.samples[i] for i in train_indices]
-            self.labels = [self.labels[i] for i in train_indices]
+            self.indices = train_indices
         elif self.partition == 'valid':
-            self.samples = [self.samples[i] for i in valid_indices]
-            self.labels = [self.labels[i] for i in valid_indices]
+            self.indices = valid_indices
         else:  # eval
-            self.samples = [self.samples[i] for i in eval_indices]
-            self.labels = [self.labels[i] for i in eval_indices]
+            self.indices = eval_indices
+            
+        # Select appropriate samples and labels
+        self.samples = [self.samples[i] for i in self.indices]
+        self.labels = [self.labels[i] for i in self.indices]
+
+        self.transform = transforms.Compose([
+            transforms.CenterCrop((342, 36)),
+            transforms.Resize((190, 20)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.504, 0.511, 0.485], std=[0.081, 0.071, 0.065])
+        ])
 
     def __len__(self):
         return len(self.samples)
@@ -92,34 +109,24 @@ class BugSenseData(Dataset):
         sample_path = self.samples[idx]
         label = self.labels[idx]
 
-        # Get all image filenames in the folder
         img_names = [img_name for img_name in os.listdir(sample_path) if img_name.endswith('.png')]
-
-        # Sort images by the number between 'time' and '_' or '.'
         img_names.sort(key=lambda x: float(re.search(r'time([0-9\.]+)[._]', x).group(1)))
 
-        # Extract image means (features) for up to `sequencelength` images
         images = []
         for img_name in img_names[:self.sequencelength]:
-            img_path = os.path.join(sample_path, img_name)
-            img = Image.open(img_path).convert('HSV')
-            img = np.array(img)
-            img_means = img.mean(axis=(0, 1))  # Compute mean across height and width
-            images.append(img_means)
+                img_path = os.path.join(sample_path, img_name)
+                img = Image.open(img_path).convert('RGB')
+                if self.transform:
+                    img = self.transform(img)
+                images.append(img)
 
-        # Handle sequence length adjustments
-        t = len(images)
-        if t < self.sequencelength:
-            # Pad with zeros if fewer than `sequencelength` images
-            padding = [np.zeros(3)] * (self.sequencelength - t)  # Zero vector for HSV
-            images.extend(padding)
-        elif t > self.sequencelength:
-            # Trim to `sequencelength` images
-            images = images[:self.sequencelength]
+        images = torch.stack(images)
+        images = images.permute(1, 0, 2, 3)
+        y = torch.tensor([label], dtype=torch.long)
+        
+        return images, y
 
-        images = np.array(images)
-
-        # Convert to tensor
-        X = torch.tensor(images, dtype=torch.float32)  # Shape: [sequencelength, features]
-        y = torch.tensor(label, dtype=torch.long)  
-        return X, y
+    def get_labels(self):
+        """Returns all labels in the dataset."""
+        return self.labels
+    
