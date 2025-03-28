@@ -2,15 +2,18 @@ import numpy as np
 import argparse
 import torch
 from model import EARLIEST
-from dataset import SyntheticTimeSeries
+from bugsense_data import BugSenseData
 from torch.utils.data.sampler import SubsetRandomSampler
 from sklearn.metrics import accuracy_score
 import utils
+import os 
+
+
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 # Dataset hyperparameters
-parser.add_argument("--dataset", type=str, help="Dataset to load. Available: Synthetic")
+parser.add_argument("--dataset", type=str, default= help="Dataset to load. Available: Synthetic")
 parser.add_argument("--ntimesteps", type=int, default=10, help="Synthetic dataset can control the number of timesteps")
 parser.add_argument("--nseries", type=int, default=500, help="Synthetic dataset can control the number of time series")
 
@@ -33,16 +36,20 @@ if __name__ == "__main__":
 
     model_save_path = args.model_save_path
 
-    if args.dataset == "synthetic":
-        data = SyntheticTimeSeries(args)
-    _, _, test_ix = utils.splitTrainingData(data.nseries)
+    # if args.dataset == "synthetic":
+    #     data = SyntheticTimeSeries(args)
+    # _, _, test_ix = utils.splitTrainingData(data.nseries)
 
-    test_sampler = SubsetRandomSampler(test_ix)
+    if args.dataset == "bugsense":
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = os.path.join(script_dir, "..", "..", "..",  "BugSenseData", "Usable", "test")
+        nclasses = 6
+        input_dim = 3
+        data = BugSenseData(root_dir, partition="eval", sequencelength=args.ntimesteps, split_ratio=(0, 0, 1))
+
 
     test_loader = torch.utils.data.DataLoader(dataset=data,
-                                              batch_size=args.batch_size,
-                                              sampler=test_sampler,
-                                              drop_last=True)
+                                              batch_size=args.batch_size)
 
     model = EARLIEST(ninp=data.N_FEATURES, nclasses=data.N_CLASSES, args=args) #nhid=HIDDEN_DIMENSION, rnn_type=CELL_TYPE, nlayers=N_LAYERS, lam=LAMBDA)
     model.load_state_dict(torch.load(model_save_path+"model.pt"), strict=False)

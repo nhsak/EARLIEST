@@ -26,20 +26,24 @@ class Controller(nn.Module):
     A network that chooses whether or not enough information
     has been seen to predict a label of a time series.
     """
-    def __init__(self, ninp, nout, epsilon=0.5):
+    def __init__(self, ninp, nout):
         super(Controller, self).__init__()
 
         # --- Mappings ---
         self.fc = nn.Linear(ninp, nout)  # Optimized w.r.t. reward
-        self._epsilon = epsilon  # Default epsilon value or pass it during instantiation
+
+        torch.nn.init.normal_(self.fc.bias, mean=-10, std=1e-1)
+
+        
 
     def forward(self, x):
         # Pass input through the controller network
         
         probs = torch.sigmoid(self.fc(x))
+        print(self.fc.bias)
         
         # Exploration vs exploitation adjustment
-        probs = (1 - self._epsilon) * probs + self._epsilon * torch.FloatTensor([0.01]).to(x.device)  # Ensure the tensor is on the correct device
+        probs = (1 - self._epsilon) * probs + self._epsilon * torch.FloatTensor([0.05]).to("cuda")  
         
         # Bernoulli distribution for the action
         m = Bernoulli(probs=probs)

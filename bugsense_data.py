@@ -96,6 +96,7 @@ class BugSenseData(Dataset):
         self.labels = [self.labels[i] for i in self.indices]
 
         self.transform = transforms.Compose([
+            transforms.Resize((380, 40)),
             transforms.CenterCrop((342, 36)),
             transforms.Resize((190, 20)),
             transforms.ToTensor(),
@@ -113,20 +114,39 @@ class BugSenseData(Dataset):
         img_names.sort(key=lambda x: float(re.search(r'time([0-9\.]+)[._]', x).group(1)))
 
         images = []
+        # Determine augmentation (only during training)
+        apply_hflip = random.random() < 0.5 if self.partition == 'train' else False
+        apply_vflip = random.random() < 0.5 if self.partition == 'train' else False
+        apply_lambda = random.random() < 0.5 if self.partition == 'train' else False
+
         for img_name in img_names[:self.sequencelength]:
-                img_path = os.path.join(sample_path, img_name)
-                img = Image.open(img_path).convert('RGB')
-                if self.transform:
-                    img = self.transform(img)
-                images.append(img)
+            img_path = os.path.join(sample_path, img_name)
+            img = Image.open(img_path).convert('RGB')
+
+            if self.transform:
+                img = self.transform(img)
+
+            # Apply flipping consistently to the whole sequence
+            if apply_hflip:
+                img = torch.flip(img, dims=[2])  # Flip horizontally
+            if apply_vflip:
+                img = torch.flip(img, dims=[1])  # Flip vertically
+            if apply_lambda:
+                img = img + 0.05 * torch.randn_like(img)  # Add noise
+
+            images.append(img)
 
         images = torch.stack(images)
         images = images.permute(1, 0, 2, 3)
-        y = torch.tensor([label], dtype=torch.long)
+        y = torch.tensor(label, dtype=torch.long)
         
         return images, y
 
     def get_labels(self):
         """Returns all labels in the dataset."""
         return self.labels
+    
+
+
+
     

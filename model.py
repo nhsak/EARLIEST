@@ -10,39 +10,36 @@ class CNNFeatureExtractor(nn.Module):
         super(CNNFeatureExtractor, self).__init__()
         
         self.cnn = nn.Sequential(
-            nn.Conv2d(in_channels, 16, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels, 16, kernel_size=(3, 3), padding=(1, 1)),
+            nn.BatchNorm2d(16),
             nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(16, 32, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.AdaptiveAvgPool2d((1, 1))  # Global average pooling to get fixed size output
+            nn.Dropout2d(p=0.2),
+            
+            nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2)),
+            nn.AdaptiveAvgPool2d((1, 1))
+        )
+
+        self.projection = nn.Sequential(
+            nn.Linear(16, hidden_dim),
+            nn.LayerNorm(hidden_dim)
         )
         
     def forward(self, x):
-        # Input shape: [C, B, T, H, W] = [3, 8, 80, 190, 20]
-        c, b, t, h, w = x.shape
+        channels, batch_size, seq_length, height, width = x.shape
         
-        # Reshape and process each time step through CNN
-        features = []
-        for i in range(t):
-            # Get current time step: [B, C, H, W]
-            curr_x = x[:, :, i, :, :].permute(1, 0, 2, 3)
-            
-            # Pass through CNN: [B, 64, 1, 1]
-            curr_features = self.cnn(curr_x)
-            
-            # Reshape to [B, 64]
-            curr_features = curr_features.view(b, -1)
-            
-            # Collect features
-            features.append(curr_features)
+        # Reshape to process each image independently
+        x_reshaped = x.permute(1, 2, 0, 3, 4).contiguous()
+        x_reshaped = x_reshaped.view(batch_size * seq_length, channels, height, width)
         
-        # Stack features: [T, B, 64]
-        features = torch.stack(features)
-
+        # Apply CNN to each image
+        features = self.cnn(x_reshaped)
+        features = features.squeeze(-1).squeeze(-1)
+        
+        # Project to hidden dimension
+        features = self.projection(features)
+        
+        # FIXED: Reshape to [seq_length, batch_size, hidden_dim] for RNN input
+        features = features.view(batch_size, seq_length, -1).permute(1, 0, 2)
         return features
 
 
@@ -51,7 +48,7 @@ class CNNFeatureExtractor(nn.Module):
 class EARLIEST(nn.Module):
     def __init__(self, ninp, nclasses, args):
         super(EARLIEST, self).__init__()
-
+        ninp = ninp
         # Hyperparameters
         self.nclasses = nclasses
         self.rnn_cell = args.rnn_cell
@@ -67,16 +64,14 @@ class EARLIEST(nn.Module):
         self.BaselineNetwork = BaselineNetwork(self.nhid+1, 1)
 
         if self.rnn_cell == "LSTM":
-            self.RNN = torch.nn.LSTM(self.nhid, self.nhid, num_layers=self.nlayers)
+            self.RNN = torch.nn.LSTM(ninp, self.nhid, num_layers=self.nlayers, batch_first= False)
         elif self.rnn_cell == "GRU":
-            self.RNN = torch.nn.GRU(self.nhid, self.nhid)
+            self.RNN = torch.nn.GRU(ninp, self.nhid)
         else:
-            self.RNN = torch.nn.RNN(self.nhid, self.nhid)
+            self.RNN = torch.nn.RNN(ninp, self.nhid)
 
         self.out = torch.nn.Linear(self.nhid, self.nclasses)
 
-        # Move the model to the correct device
-        self.to(device)
 
     def initHidden(self, bsz):
         if self.rnn_cell == "LSTM":
@@ -87,13 +82,12 @@ class EARLIEST(nn.Module):
 
     def forward(self, X, epoch=0, test=False):
         if test:
-            self.Controller._epsilon =  1
+            self.Controller._epsilon =  0
         else:
-            self.Controller._epsilon = 1 # set explore/exploit trade-off
+            self.Controller._epsilon = 0.9 # set explore/exploit trade-off
 
-        X = X.to(device)  # Ensure input is on the correct device
         X = self.intransforms(X)
-        print(X.shape)
+        
         T, B, V = X.shape
         baselines = []
         actions = []
@@ -136,14 +130,14 @@ class EARLIEST(nn.Module):
         self.grad_mask = torch.zeros_like(self.actions)
         for b in range(B):
             self.grad_mask[b, :(1 + halt_points[b, 0]).long()] = 1
-        return logits.squeeze(), (1 + halt_points).mean() / (T + 1)
+        return logits.squeeze(), (1 + halt_points).mean().cpu() / (T + 1)
 
     def computeLoss(self, logits, y):
         _, y_hat = torch.max(torch.softmax(logits, dim=1), dim=1)
-        self.r = (2 * (y_hat.float().round() == y.float()).float() - 1).detach().unsqueeze(1).to(device)
-        self.R = self.r * self.grad_mask.to(device)
+        self.r = (2 * (y_hat.float().round() == y.float()).float() - 1).detach().unsqueeze(1)
+        self.R = self.r * self.grad_mask
 
-        b = self.grad_mask * self.baselines.to(device)
+        b = self.grad_mask * self.baselines
         self.adjusted_reward = self.R - b.detach()
 
         MSE = torch.nn.MSELoss()
@@ -153,5 +147,5 @@ class EARLIEST(nn.Module):
         self.loss_c = CE(logits, y)
         self.wait_penalty = self.halt_probs.sum(1).mean()
         self.lam = torch.tensor([self.lam], dtype=torch.float, requires_grad=False).to(device)
-        loss = self.loss_r + self.loss_b + 3 * self.loss_c + self.lam * (self.wait_penalty)
+        loss = self.loss_r + self.loss_b + 10*self.loss_c + self.lam * (self.wait_penalty)
         return loss
