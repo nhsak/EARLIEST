@@ -47,7 +47,7 @@ class EARLIEST(nn.Module):
         self.BaselineNetwork = BaselineNetwork(self.nhid+1, 1)
         if self.rnn_cell == "LSTM":
             self.RNN = torch.nn.LSTM(ninp, self.nhid)
-        elif self.rnn_cell == "LSTM":
+        elif self.rnn_cell == "GRU":
             self.RNN = torch.nn.GRU(ninp, self.nhid)
         else:
             self.RNN = torch.nn.RNN(ninp, self.nhid)

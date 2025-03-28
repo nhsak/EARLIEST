@@ -2,7 +2,7 @@ import numpy as np
 import argparse
 import torch
 from model import EARLIEST
-from dataset import SyntheticTimeSeries
+from dataset import SyntheticTimeSeries, BugSenseTimeSeries
 from torch.utils.data.sampler import SubsetRandomSampler
 import utils
 from sklearn.metrics import accuracy_score
@@ -10,8 +10,8 @@ from sklearn.metrics import accuracy_score
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 # Dataset hyperparameters
-parser.add_argument("--dataset", type=str, default= "synthetic",  help="Dataset to load. Available: Synthetic")
-parser.add_argument("--ntimesteps", type=int, default=10, help="Synthetic dataset can control the number of timesteps")
+parser.add_argument("--dataset", type=str, default= "bugsense",  help="Dataset to load. Available: Synthetic")
+parser.add_argument("--ntimesteps", type=int, default=20, help="Synthetic dataset can control the number of timesteps")
 parser.add_argument("--nseries", type=int, default=500, help="Synthetic dataset can control the number of time series")
 
 # Model hyperparameters
@@ -39,7 +39,14 @@ if __name__ == "__main__":
 
     if args.dataset == "synthetic":
         data = SyntheticTimeSeries(args)
+
+    elif args.dataset == "bugsense":
+        data = BugSenseTimeSeries(args)
+
+    print(data.nseries)
     train_ix, validation_ix, test_ix = utils.splitTrainingData(data.nseries)
+    print(train_ix)
+
 
     train_sampler = SubsetRandomSampler(train_ix)
     validation_sampler = SubsetRandomSampler(validation_ix)
@@ -69,6 +76,7 @@ if __name__ == "__main__":
         model._epsilon = exponentials[epoch]
         loss_sum = 0
         for i, (X, y) in enumerate(train_loader):
+            print(X.shape)
             X = torch.transpose(X, 0, 1)
             # --- Forward pass ---
             logits, halting_points = model(X, epoch)
