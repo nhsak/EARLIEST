@@ -76,5 +76,5 @@ class BugSenseTimeSeries(Dataset):
         print(data.shape)
         labels = torch.tensor(np.array(labels_grouped).astype(np.int32), dtype=torch.long)
 
-        return data, labels
+        return data, labels.squeeze()
     

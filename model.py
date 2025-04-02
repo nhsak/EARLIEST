@@ -66,7 +66,7 @@ class EARLIEST(nn.Module):
         if test: # Model chooses for itself during testing
             self.Controller._epsilon = 0.0
         else:
-            self.Controller._epsilon = self._epsilon # set explore/exploit trade-off
+            self.Controller._epsilon = 1 # set explore/exploit trade-off
         T, B, V = X.shape # Assume input is of shape (TIMESTEPS x BATCH x VARIABLES)
         baselines = [] # Predicted baselines
         actions = [] # Which classes to halt at each step
@@ -127,7 +127,7 @@ class EARLIEST(nn.Module):
     def computeLoss(self, logits, y):
         # --- compute reward ---
         _, y_hat = torch.max(torch.softmax(logits, dim=1), dim=1)
-        self.r = (2*(y_hat.float().round() == y.float()).float()-1).detach().unsqueeze(1)
+        self.r = (2*(y_hat.float().round() == y.float()).float()-1).detach().unsqueeze(1) 
         self.R = self.r * self.grad_mask
 
         # --- rescale reward with baseline ---
@@ -139,11 +139,10 @@ class EARLIEST(nn.Module):
         CE = torch.nn.CrossEntropyLoss()
         self.loss_b = MSE(b, self.R) # Baseline should approximate mean reward
         self.loss_r = (-self.log_pi*self.adjusted_reward).sum()/self.log_pi.shape[1] # RL loss
-        print(self.loss_r)
         self.loss_c = CE(logits, y) # Classification loss
         self.wait_penalty = self.halt_probs.sum(1).mean() # Penalize late predictions
         self.lam = torch.tensor([self.lam], dtype=torch.float, requires_grad=False)
-        loss = self.loss_r + self.loss_b + self.loss_c + self.lam*(self.wait_penalty)
+        loss = self.loss_r + self.loss_b + 10*self.loss_c + self.lam*(self.wait_penalty)
         # It can help to add a larger weight to self.loss_c so early training
         # focuses on classification: ... + 10*self.loss_c + ...
         return loss

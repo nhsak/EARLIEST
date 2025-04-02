@@ -21,7 +21,7 @@ parser.add_argument("--rnn_cell", type=str, default="LSTM", help="Type of RNN to
 parser.add_argument("--lam", type=float, default=0.0, help="Penalty of waiting. This controls the emphasis on earliness: Larger values lead to earlier predictions.")
 
 # Training hyperparameters
-parser.add_argument("--batch_size", type=int, default=10, help="Batch size.")
+parser.add_argument("--batch_size", type=int, default=18, help="Batch size.")
 parser.add_argument("--model_save_path", type=str, default="./saved_models/", help="Where to save the model once it is trained.")
 parser.add_argument("--random_seed", type=int, default="42", help="Set the random seed.")
 

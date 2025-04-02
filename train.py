@@ -6,24 +6,25 @@ from dataset import SyntheticTimeSeries, BugSenseTimeSeries
 from torch.utils.data.sampler import SubsetRandomSampler
 import utils
 from sklearn.metrics import accuracy_score
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 # Dataset hyperparameters
 parser.add_argument("--dataset", type=str, default= "bugsense",  help="Dataset to load. Available: Synthetic")
-parser.add_argument("--ntimesteps", type=int, default=20, help="Synthetic dataset can control the number of timesteps")
-parser.add_argument("--nseries", type=int, default=500, help="Synthetic dataset can control the number of time series")
+parser.add_argument("--ntimesteps", type=int, default=80, help="Synthetic dataset can control the number of timesteps")
+parser.add_argument("--nseries", type=int, default=243, help="Synthetic dataset can control the number of time series")
 
 # Model hyperparameters
-parser.add_argument("--nhid", type=int, default=50, help="Number of dimensions of the hidden state of EARLIEST")
+parser.add_argument("--nhid", type=int, default=64, help="Number of dimensions of the hidden state of EARLIEST")
 parser.add_argument("--nlayers", type=int, default=1, help="Number of layers for EARLIEST's RNN.")
 parser.add_argument("--rnn_cell", type=str, default="LSTM", help="Type of RNN to use in EARLIEST. Available: GRU, LSTM")
-parser.add_argument("--lam", type=float, default=0.0, help="Penalty of waiting. This controls the emphasis on earliness: Larger values lead to earlier predictions.")
+parser.add_argument("--lam", type=float, default=0, help="Penalty of waiting. This controls the emphasis on earliness: Larger values lead to earlier predictions.")
 
 # Training hyperparameters
-parser.add_argument("--batch_size", type=int, default=10, help="Batch size.")
+parser.add_argument("--batch_size", type=int, default=16, help="Batch size.")
 parser.add_argument("--nepochs", type=int, default=50, help="Number of epochs.")
-parser.add_argument("--learning_rate", type=float, default="0.001", help="Learning rate.")
+parser.add_argument("--learning_rate", type=float, default="0.01", help="Learning rate.")
 parser.add_argument("--model_save_path", type=str, default="./saved_models/", help="Where to save the model once it is trained.")
 parser.add_argument("--random_seed", type=int, default="42", help="Set the random seed.")
 
@@ -43,9 +44,9 @@ if __name__ == "__main__":
     elif args.dataset == "bugsense":
         data = BugSenseTimeSeries(args)
 
-    print(data.nseries)
+    
     train_ix, validation_ix, test_ix = utils.splitTrainingData(data.nseries)
-    print(train_ix)
+    
 
 
     train_sampler = SubsetRandomSampler(train_ix)
@@ -75,8 +76,8 @@ if __name__ == "__main__":
         model._r_counts = np.zeros(data.ntimesteps).reshape(1, -1)
         model._epsilon = exponentials[epoch]
         loss_sum = 0
-        for i, (X, y) in enumerate(train_loader):
-            print(X.shape)
+        for i, (X, y) in enumerate(tqdm(train_loader, leave=False)):
+
             X = torch.transpose(X, 0, 1)
             # --- Forward pass ---
             logits, halting_points = model(X, epoch)
@@ -92,11 +93,9 @@ if __name__ == "__main__":
             loss_sum += loss.item()
             optimizer.step()
 
-            if (i+1) % 10 == 0:
-                print ('Epoch [{}/{}], Batch [{}/{}], Loss: {:.4f}'.format(epoch+1, args.nepochs, i+1, len(train_loader), loss.item()))
-
         training_loss.append(np.round(loss_sum/len(train_loader), 3))
         scheduler.step()
+        print("Epoch {}: Training loss: {}".format(epoch, loss_sum/len(train_loader)))
 
     # --- Run model on validation data ---
     validation_locations = []
