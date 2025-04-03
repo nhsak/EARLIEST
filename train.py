@@ -25,7 +25,7 @@ parser.add_argument("--lam", type=float, default=0, help="Penalty of waiting. Th
 parser.add_argument("--batch_size", type=int, default=16, help="Batch size.")
 parser.add_argument("--nepochs", type=int, default=50, help="Number of epochs.")
 parser.add_argument("--learning_rate", type=float, default="0.01", help="Learning rate.")
-parser.add_argument("--model_save_path", type=str, default="./saved_models/", help="Where to save the model once it is trained.")
+parser.add_argument("--model_save_path", type=str, default="saved_models/", help="Where to save the model once it is trained.")
 parser.add_argument("--random_seed", type=int, default="42", help="Set the random seed.")
 
 args = parser.parse_args()
@@ -67,10 +67,11 @@ if __name__ == "__main__":
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99)
 
     # --- training ---
-    training_loss = []
-    training_locations = []
-    training_predictions = []
+    
     for epoch in range(args.nepochs):
+        training_loss = []
+        training_locations = []
+        training_predictions = []
         model._REWARDS = 0
         model._r_sums = np.zeros(data.ntimesteps).reshape(1, -1)
         model._r_counts = np.zeros(data.ntimesteps).reshape(1, -1)
@@ -96,6 +97,7 @@ if __name__ == "__main__":
         training_loss.append(np.round(loss_sum/len(train_loader), 3))
         scheduler.step()
         print("Epoch {}: Training loss: {}".format(epoch, loss_sum/len(train_loader)))
+        print("Mean proportion used: {}%".format(np.round(100.*np.mean(training_locations), 3)))
 
     # --- Run model on validation data ---
     validation_locations = []

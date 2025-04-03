@@ -64,7 +64,7 @@ class EARLIEST(nn.Module):
     def forward(self, X, epoch=0, test=False):
         """Compute halting points and predictions"""
         if test: # Model chooses for itself during testing
-            self.Controller._epsilon = 0.0
+            self.Controller._epsilon = 1
         else:
             self.Controller._epsilon = 1 # set explore/exploit trade-off
         T, B, V = X.shape # Assume input is of shape (TIMESTEPS x BATCH x VARIABLES)
