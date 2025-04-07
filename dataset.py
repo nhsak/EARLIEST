@@ -55,8 +55,8 @@ class BugSenseTimeSeries(Dataset):
         return self.data[ix], self.labels[ix]
 
     def load_dataset(self):
-        data = pd.read_csv('data/time_series_data.csv',  header=None)
-        labels = pd.read_csv('data/time_series_labels.csv',usecols=[0], header=None)
+        data = pd.read_csv('/media/storage/users/go98kef/EARLIEST/EARLIEST/data/time_series_data.csv',  header=None)
+        labels = pd.read_csv('/media/storage/users/go98kef/EARLIEST/EARLIEST/data/time_series_labels.csv',usecols=[0], header=None)
 
         self.nseries = 243
         print(self.nseries)

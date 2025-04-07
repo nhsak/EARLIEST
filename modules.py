@@ -15,7 +15,6 @@ class BaselineNetwork(nn.Module):
 
         # --- Mappings ---
         self.fc = nn.Linear(input_size, output_size)
-        torch.nn.init.normal_(self.fc.bias, mean=-20, std=1e-1)
 
         
 
@@ -36,7 +35,7 @@ class Controller(nn.Module):
 
     def forward(self, x):
         probs = torch.sigmoid(self.fc(x))
-        probs = (1-self._epsilon)*probs + self._epsilon*torch.FloatTensor([0.001])  # Explore/exploit
+        probs = (1-self._epsilon)*probs + self._epsilon*torch.FloatTensor([0.01])  # Explore/exploit
         m = Bernoulli(probs=probs)
         action = m.sample() # sample an action
         log_pi = m.log_prob(action) # compute log probability of sampled action

@@ -23,7 +23,7 @@ parser.add_argument("--lam", type=float, default=0, help="Penalty of waiting. Th
 
 # Training hyperparameters
 parser.add_argument("--batch_size", type=int, default=16, help="Batch size.")
-parser.add_argument("--nepochs", type=int, default=50, help="Number of epochs.")
+parser.add_argument("--nepochs", type=int, default=150, help="Number of epochs.")
 parser.add_argument("--learning_rate", type=float, default="0.01", help="Learning rate.")
 parser.add_argument("--model_save_path", type=str, default="saved_models/", help="Where to save the model once it is trained.")
 parser.add_argument("--random_seed", type=int, default="42", help="Set the random seed.")
@@ -83,8 +83,7 @@ if __name__ == "__main__":
             # --- Forward pass ---
             logits, halting_points = model(X, epoch)
             _, predictions = torch.max(torch.softmax(logits, dim=1), dim=1)
-
-            training_locations.append(halting_points)
+            training_locations.append(halting_points[:,0])
             training_predictions.append(predictions)
 
             # --- Compute gradients and update weights ---
@@ -97,7 +96,7 @@ if __name__ == "__main__":
         training_loss.append(np.round(loss_sum/len(train_loader), 3))
         scheduler.step()
         print("Epoch {}: Training loss: {}".format(epoch, loss_sum/len(train_loader)))
-        print("Mean proportion used: {}%".format(np.round(100.*np.mean(training_locations), 3)))
+        print("Mean proportion used: {}%".format(np.round(100.*np.mean(training_locations)/80, 3)))
 
     # --- Run model on validation data ---
     validation_locations = []
@@ -109,7 +108,7 @@ if __name__ == "__main__":
         logits, halting_points = model(X, test=True)
         _, predictions = torch.max(torch.softmax(logits, dim=1), dim=1)
 
-        validation_locations.append(halting_points)
+        validation_locations.append(halting_points[:,0])
         validation_predictions.append(predictions)
         validation_labels.append(y)
 
@@ -118,7 +117,8 @@ if __name__ == "__main__":
     validation_locations = torch.stack(validation_locations).numpy().reshape(-1, 1)
 
     print("Validation Accuracy: {}".format(np.round(accuracy_score(validation_labels, validation_predictions), 3)))
-    print("Mean proportion used: {}%".format(np.round(100.*np.mean(validation_locations), 3)))
+    print("Mean proportion used: {}%".format(np.round(100.*np.mean(validation_locations)/80, 3)))
+    print("Exact stopping locations: {}" .format(validation_locations))
 
     # --- save model ---
     torch.save(model.state_dict(), model_save_path+"model.pt")

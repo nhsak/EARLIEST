@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from modules import Controller, BaselineNetwork
 import numpy as np
+from torch.utils.tensorboard import SummaryWriter
 
 class EARLIEST(nn.Module):
     """Code for the paper titled: Adaptive-Halting Policy Network for Early Classification
@@ -36,6 +37,8 @@ class EARLIEST(nn.Module):
         # --- Hyperparameters ---
         ninp = ninp
         self.nclasses = nclasses
+        self.writer = SummaryWriter()
+        self.global_step = 0
 
         self.rnn_cell = args.rnn_cell
         self.nhid = args.nhid
@@ -66,7 +69,7 @@ class EARLIEST(nn.Module):
         if test: # Model chooses for itself during testing
             self.Controller._epsilon = 1
         else:
-            self.Controller._epsilon = 1 # set explore/exploit trade-off
+            self.Controller._epsilon = 0.8 # set explore/exploit trade-off
         T, B, V = X.shape # Assume input is of shape (TIMESTEPS x BATCH x VARIABLES)
         baselines = [] # Predicted baselines
         actions = [] # Which classes to halt at each step
@@ -122,7 +125,8 @@ class EARLIEST(nn.Module):
         self.grad_mask = torch.zeros_like(self.actions)
         for b in range(B):
             self.grad_mask[b, :(1 + halt_points[b, 0]).long()] = 1
-        return logits.squeeze(), (1+halt_points).mean()/(T+1)
+        
+        return logits.squeeze(), halt_points
 
     def computeLoss(self, logits, y):
         # --- compute reward ---
@@ -143,6 +147,16 @@ class EARLIEST(nn.Module):
         self.wait_penalty = self.halt_probs.sum(1).mean() # Penalize late predictions
         self.lam = torch.tensor([self.lam], dtype=torch.float, requires_grad=False)
         loss = self.loss_r + self.loss_b + 10*self.loss_c + self.lam*(self.wait_penalty)
+        # Log losses to tensorboard
+        if hasattr(self, 'writer') and self.writer is not None:
+            self.writer.add_scalar('Loss/reinforcement', self.loss_r.item(), self.global_step)
+            self.writer.add_scalar('Loss/baseline', self.loss_b.item(), self.global_step)
+            self.writer.add_scalar('Loss/classification', self.loss_c.item(), self.global_step)
+            self.writer.add_scalar('Loss/wait_penalty', self.wait_penalty.item(), self.global_step)
+            self.writer.add_scalar('Loss/total', loss.item(), self.global_step)
+            self.global_step += 1
+
+        
         # It can help to add a larger weight to self.loss_c so early training
         # focuses on classification: ... + 10*self.loss_c + ...
         return loss
