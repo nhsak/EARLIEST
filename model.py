@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from modules import Controller, BaselineNetwork
 import numpy as np
+from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -55,6 +56,8 @@ class EARLIEST(nn.Module):
         self.nhid = args.nhid
         self.nlayers = args.nlayers
         self.lam = args.lam
+        self.writer = SummaryWriter()
+        self.global_step = 0
 
         # Update intransforms in EARLIEST model
         self.intransforms = CNNFeatureExtractor(3, self.nhid)
@@ -84,7 +87,7 @@ class EARLIEST(nn.Module):
         if test:
             self.Controller._epsilon =  0
         else:
-            self.Controller._epsilon = 0.9 # set explore/exploit trade-off
+            self.Controller._epsilon = 0.8 # set explore/exploit trade-off
 
         X = self.intransforms(X)
         
@@ -130,7 +133,7 @@ class EARLIEST(nn.Module):
         self.grad_mask = torch.zeros_like(self.actions)
         for b in range(B):
             self.grad_mask[b, :(1 + halt_points[b, 0]).long()] = 1
-        return logits.squeeze(), (1 + halt_points).mean().cpu() / (T + 1)
+        return logits.squeeze(), halt_points
 
     def computeLoss(self, logits, y):
         _, y_hat = torch.max(torch.softmax(logits, dim=1), dim=1)
@@ -148,4 +151,11 @@ class EARLIEST(nn.Module):
         self.wait_penalty = self.halt_probs.sum(1).mean()
         self.lam = torch.tensor([self.lam], dtype=torch.float, requires_grad=False).to(device)
         loss = self.loss_r + self.loss_b + 10*self.loss_c + self.lam * (self.wait_penalty)
+        if hasattr(self, 'writer') and self.writer is not None:
+            self.writer.add_scalar('Loss/reinforcement', self.loss_r.item(), self.global_step)
+            self.writer.add_scalar('Loss/baseline', self.loss_b.item(), self.global_step)
+            self.writer.add_scalar('Loss/classification', self.loss_c.item(), self.global_step)
+            self.writer.add_scalar('Loss/wait_penalty', self.wait_penalty.item(), self.global_step)
+            self.writer.add_scalar('Loss/total', loss.item(), self.global_step)
+            self.global_step += 1
         return loss

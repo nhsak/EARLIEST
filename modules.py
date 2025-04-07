@@ -2,6 +2,9 @@ from torch import nn
 import torch
 from torch.distributions import Bernoulli
 
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class BaselineNetwork(nn.Module):
     """
     A network which predicts the average reward observed
@@ -34,8 +37,8 @@ class Controller(nn.Module):
         self.fc = nn.Linear(ninp, nout)  # Optimized w.r.t. reward
 
     def forward(self, x):
-        probs = torch.sigmoid(self.fc(x))
-        probs = (1-self._epsilon)*probs + self._epsilon*torch.FloatTensor([0.01])  # Explore/exploit
+        probs = torch.sigmoid(self.fc(x)).to(device)
+        probs = (1-self._epsilon)*probs + self._epsilon*torch.FloatTensor([0.01]).to(device)  # Explore/exploit
         m = Bernoulli(probs=probs)
         action = m.sample() # sample an action
         log_pi = m.log_prob(action) # compute log probability of sampled action
